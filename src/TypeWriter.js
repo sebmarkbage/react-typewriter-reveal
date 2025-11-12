@@ -67,29 +67,35 @@ function isInvisible(element) {
   return rect.width === 0 || rect.height === 0;
 }
 
-function countSteps(node) {
+function countSteps(element) {
   // Count how many potential steps we can break this node down into.
-  switch (node.nodeType) {
-    case TEXT_NODE:
-      return node.nodeValue.length;
-    case ELEMENT_NODE:
+  let sum = 0;
+  let node = element;
+  while (true) {
+    if (node.nodeType === TEXT_NODE) {
+      sum += node.nodeValue.length;
+    } else if (node.nodeType === ELEMENT_NODE) {
       if (isInvisible(node)) {
         // This whole element is invisible. Don't consider it part of the content.
-        return 0;
+      } else if (isContentElement(node)) {
+        // We've consumed one step.
+        sum += getContentLength(node);
+      } else if (node.firstChild !== null) {
+        node = node.firstChild;
+        continue;
       }
-      if (isContentElement(node)) {
-        return getContentLength(node);
+    }
+    // Move onto the next node.
+    while (node.nextSibling === null) {
+      if (node.parentNode === null || node.parentNode === element) {
+        // We reached back up to the element.
+        return sum;
       }
-      let sum = 0;
-      let child = node.firstChild;
-      while (child !== null) {
-        sum += countSteps(child);
-        child = child.nextSibling;
-      }
-      return sum;
-    default:
-      return 0;
+      node = node.parentNode;
+    }
+    node = node.nextSibling;
   }
+  return sum;
 }
 
 function selectNextRange(range, stepsToMove) {
