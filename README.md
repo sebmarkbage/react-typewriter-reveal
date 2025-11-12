@@ -39,7 +39,6 @@ return (
 );
 ```
 
-
 Block elements with their own background, border or outline will be revealed as a single unit. You can use nested `<TypeWriter>` to reveal the text inside a block incrementally.
 
 ```js
@@ -49,7 +48,7 @@ return (
   <TypeWriter duration={1000} fps={15}>
     <p>First paragraph.</p>
     <code className="block bg-gray-100">
-      <TypeWriter>
+      <TypeWriter caret="_">
         console.log('Hello, world!');
       </TypeWriter>
     </code>
