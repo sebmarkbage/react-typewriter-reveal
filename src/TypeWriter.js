@@ -1,6 +1,16 @@
 "use client";
 
-import { useRef, useLayoutEffect, useSyncExternalStore } from "react";
+import {
+  createContext,
+  createRef,
+  useContext,
+  useState,
+  useRef,
+  useLayoutEffect,
+  useSyncExternalStore,
+} from "react";
+
+const TypeWriterContext = createContext(null);
 
 // We arbitrarily treat content elements equivalent to 10 characters of text.
 const CHARACTERS_PER_CONTENT_ELEMENT = 10;
@@ -150,7 +160,7 @@ function animate(element, caretElement, duration, fps, delay) {
   }
   let caretReferenceRect = null;
   let lastRect = null;
-  if (caretElement !== undefined) {
+  if (caretElement != null) {
     const range = document.createRange();
     range.selectNodeContents(caretElement);
     // Measure the size of the contents. Allowing us to get the line-height.
@@ -209,7 +219,7 @@ function animate(element, caretElement, duration, fps, delay) {
       fill,
     }
   );
-  if (caretElement !== undefined && caretReferenceRect !== null) {
+  if (caretElement !== null && caretReferenceRect !== null) {
     const caretAnimation = caretElement.animate(
       {
         opacity: caretOpacityKeyframes,
@@ -241,6 +251,51 @@ function getServerSnapshot() {
   return true;
 }
 
+function createTypeWriterInstance() {
+  return {
+    parent: null,
+    children: [],
+    elementRef: createRef(null),
+    caretRef: createRef(null),
+    duration: 300,
+    fps: 60,
+    delay: 0,
+    scheduled: false,
+    runningAnimation: null,
+  };
+}
+
+function attemptAnimation(instance) {
+  const element = instance.elementRef.current;
+  const caretElement = instance.caretRef.current;
+  if (!element) {
+    return;
+  }
+  let animatingRoot = instance;
+  let animatingRootElement = element;
+  while (animatingRoot.parent !== null && animatingRoot.parent.scheduled) {
+    animatingRoot = animatingRoot.parent;
+    const parentElement = animatingRoot.elementRef.current;
+    if (parentElement === null) {
+      console.error(
+        "Did not expect a parentElement to be missing if scheduled."
+      );
+      return;
+    }
+    animatingRootElement = parentElement;
+  }
+  const cancel = animate(
+    element,
+    caretElement,
+    animatingRoot.duration,
+    instance.fps,
+    instance.delay
+  );
+  if (cancel) {
+    instance.runningAnimation = cancel;
+  }
+}
+
 export default function TypeWriter({
   children,
   fps = 60,
@@ -248,8 +303,8 @@ export default function TypeWriter({
   delay = 0,
   caret,
 }) {
-  const ref = useRef();
-  const caretRef = useRef();
+  const parentInstance = useContext(TypeWriterContext);
+  const [instance] = useState(createTypeWriterInstance);
 
   const wasSSR = useRef(false);
   const isSSR = useSyncExternalStore(
@@ -259,23 +314,65 @@ export default function TypeWriter({
   );
   // This avoids rerendering after hydration since it'll be consistently wasSSR after this.
   wasSSR.current = isSSR;
+
   useLayoutEffect(() => {
+    // This is the duration that will be used to coordinate children as they animate.
+    instance.duration = duration;
+    instance.fps = fps;
+    instance.delay = delay;
+  }, [duration, delay, fps]);
+
+  useLayoutEffect(() => {
+    if (parentInstance !== null) {
+      instance.parent = parentInstance;
+      const parentChildren = parentInstance.children;
+      parentChildren.push(instance);
+    }
+
+    if (instance.scheduled) {
+      console.error("Did not expect to see the instance already scheduled.");
+      return;
+    }
+
+    let canceled = false;
     if (wasSSR.current) {
       // If we're hydrating, it's too late to run the animation.
       // We have already painted the content.
-      return;
+    } else {
+      // Schedule an animation to after we know if any parents/siblings will animate too.
+      instance.scheduled = true;
+      queueMicrotask(() => {
+        if (canceled) {
+          return;
+        }
+        instance.scheduled = false;
+        attemptAnimation(instance);
+      });
     }
-    const element = ref.current;
-    const caretElement = caretRef.current;
-    if (!element) {
-      return;
-    }
-    return animate(element, caretElement, duration, fps, delay);
-  }, []);
+    return () => {
+      canceled = true;
+      instance.scheduled = false;
+      // Remove ourselves from the parent.
+      if (parentInstance !== null) {
+        instance.parent = null;
+        const parentChildren = parentInstance.children;
+        const idx = parentChildren.indexOf(instance);
+        if (idx !== -1) {
+          parentChildren.splice(idx, 1);
+        }
+      }
+      const cancel = instance.runningAnimation;
+      if (cancel) {
+        instance.runningAnimation = null;
+        cancel();
+      }
+    };
+  }, [parentInstance, instance]);
+
   return (
-    <>
+    <TypeWriterContext.Provider value={instance}>
       <span
-        ref={ref}
+        ref={instance.elementRef}
         style={{
           // The reason we need an inline-block element or block element as the root
           // is because clip-path's reference frame is not standardized for inline
@@ -287,12 +384,12 @@ export default function TypeWriter({
       </span>
       {caret != null ? (
         <span
-          ref={caretRef}
+          ref={instance.caretRef}
           style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
         >
           {caret}
         </span>
       ) : null}
-    </>
+    </TypeWriterContext.Provider>
   );
 }
