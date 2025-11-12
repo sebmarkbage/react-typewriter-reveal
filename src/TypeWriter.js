@@ -244,7 +244,7 @@ function getServerSnapshot() {
 export default function TypeWriter({
   children,
   fps = 60,
-  duration = 30,
+  duration = 300,
   caret,
 }) {
   const ref = useRef();
