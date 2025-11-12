@@ -273,7 +273,15 @@ export default function TypeWriter({
   }, []);
   return (
     <>
-      <span ref={ref} style={{ display: "inline-block" }}>
+      <span
+        ref={ref}
+        style={{
+          // The reason we need an inline-block element or block element as the root
+          // is because clip-path's reference frame is not standardized for inline
+          // elements and browsers differ in how they implement it.
+          display: "inline-block",
+        }}
+      >
         {children}
       </span>
       {caret != null ? (
