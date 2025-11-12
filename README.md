@@ -17,11 +17,13 @@ The `duration` (milliseconds) prop can be used to control how long an animation 
 
 The `fps` prop can be used to control how many frames per second are animated. The default is 60fps. Lowering can give a different effect.
 
+The `delay` (milliseconds) prop can be used to delay the start of the reveal to allow for sequences to be coordinated. The default is 0ms.
+
 ```js
 import TypeWriter from 'react-typewriter-reveal';
 ...
 return (
-  <TypeWriter duration={1000} fps={15}>
+  <TypeWriter duration={1000} fps={15} delay={0}>
     ...
   </TypeWriter>
 );

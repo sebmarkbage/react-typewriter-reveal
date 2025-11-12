@@ -124,7 +124,7 @@ function selectNextRange(range, stepsToMove) {
   return -stepsToMove;
 }
 
-function animate(element, caretElement, duration, fps) {
+function animate(element, caretElement, duration, fps, delay) {
   const frameCount = Math.floor((duration * fps) / 1000);
   if (frameCount < 2) {
     console.warn("TypeWriter duration or fps is too small.");
@@ -160,10 +160,10 @@ function animate(element, caretElement, duration, fps) {
     }
   }
   let path = "";
-  for (let i = 0; i < frameCount - 1; i++) {
+  for (let i = 0; i < frameCount; i++) {
     // We compute the steps move based on where we are and where we should
     // be so that we spread out the number of steps through the sequence.
-    const stepWeShouldBeAt = stepsPerFrame * (i + 1);
+    const stepWeShouldBeAt = stepsPerFrame * i;
     const stepsToMove = Math.round(stepWeShouldBeAt - currentStep);
     const overshoot = selectNextRange(range, stepsToMove);
     const rects = range.getClientRects();
@@ -193,13 +193,9 @@ function animate(element, caretElement, duration, fps) {
     }
     currentStep += stepsToMove + overshoot;
   }
-  // The last frame shows everything.
-  keyframes.push("none");
-  // Hide the caret at the end.
-  caretOpacityKeyframes.push("0");
-  caretTranslateKeyframes.push("none");
 
   const easing = "steps(" + (frameCount - 1) + ", end)";
+  const fill = "backwards";
 
   // Start the animtion
   const elementAnimation = element.animate(
@@ -207,8 +203,10 @@ function animate(element, caretElement, duration, fps) {
       clipPath: keyframes,
     },
     {
+      delay,
       duration,
       easing,
+      fill,
     }
   );
   if (caretElement !== undefined && caretReferenceRect !== null) {
@@ -218,8 +216,10 @@ function animate(element, caretElement, duration, fps) {
         translate: caretTranslateKeyframes,
       },
       {
+        delay,
         duration,
         easing,
+        fill,
       }
     );
     return () => {
@@ -245,6 +245,7 @@ export default function TypeWriter({
   children,
   fps = 60,
   duration = 300,
+  delay = 0,
   caret,
 }) {
   const ref = useRef();
@@ -269,7 +270,7 @@ export default function TypeWriter({
     if (!element) {
       return;
     }
-    return animate(element, caretElement, duration, fps);
+    return animate(element, caretElement, duration, fps, delay);
   }, []);
   return (
     <>
