@@ -58,3 +58,5 @@ return (
   </TypeWriter>
 );
 ```
+
+In this case, the root most `<TypeWriter>` controls the timing of the inner animation. They appear as one sequence.

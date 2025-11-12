@@ -67,17 +67,24 @@ function isInvisible(element) {
   return rect.width === 0 || rect.height === 0;
 }
 
-function countSteps(element) {
+function countSteps(element, end) {
   // Count how many potential steps we can break this node down into.
   let sum = 0;
   let node = element;
   while (true) {
+    if (end !== undefined && node === end) {
+      return sum;
+    }
     if (node.nodeType === TEXT_NODE) {
       sum += node.nodeValue.length;
     } else if (node.nodeType === ELEMENT_NODE) {
       if (isInvisible(node)) {
         // This whole element is invisible. Don't consider it part of the content.
-      } else if (isContentElement(node)) {
+      } else if (
+        isContentElement(node) &&
+        // If we the end target is inside this node, then we need to drill into it.
+        (end === undefined || !node.contains(end))
+      ) {
         // We've consumed one step.
         sum += getContentLength(node);
       } else if (node.firstChild !== null) {
@@ -140,7 +147,7 @@ function selectNextRange(range, stepsToMove) {
   return -stepsToMove;
 }
 
-function animate(element, caretElement, duration, fps, delay) {
+function animate(rootElement, element, caretElement, duration, fps, delay) {
   const frameCount = Math.floor((duration * fps) / 1000);
   if (frameCount < 2) {
     console.warn("TypeWriter duration or fps is too small.");
@@ -152,7 +159,18 @@ function animate(element, caretElement, duration, fps, delay) {
   const range = document.createRange();
   range.setStart(element, 0);
   range.setEnd(element, 0);
+  const stepsWithinElement = countSteps(element);
+  const stepsUntilStart =
+    rootElement === element ? 0 : countSteps(rootElement, element);
+  const stepsWithinRoot =
+    rootElement === element ? stepsWithinElement : countSteps(rootElement);
   const stepsPerFrame = countSteps(element) / frameCount;
+
+  // Add a delay until the root animation's steps have reached us.
+  delay += (duration * stepsUntilStart) / stepsWithinRoot;
+  // Adjust the duration based on the slice of the root duration we occupy.
+  duration *= stepsWithinElement / stepsWithinRoot;
+
   let currentStep = 0;
   const elementRects = element.getClientRects();
   if (elementRects.length !== 1) {
@@ -291,6 +309,7 @@ function attemptAnimation(instance) {
     animatingRootElement = parentElement;
   }
   const cancel = animate(
+    animatingRootElement,
     element,
     caretElement,
     animatingRoot.duration,
