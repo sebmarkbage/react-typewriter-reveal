@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useLayoutEffect } from "react";
+import { useRef, useLayoutEffect, useSyncExternalStore } from "react";
 
 // We arbitrarily treat content elements equivalent to 10 characters of text.
 const CHARACTERS_PER_CONTENT_ELEMENT = 10;
@@ -179,9 +179,30 @@ function animate(element, duration, fps) {
   });
 }
 
+function subscribeToStore() {
+  // noop
+}
+
+function getServerSnapshot() {
+  return true;
+}
+
 export default function TypeWriter({ children, fps = 60, duration = 300 }) {
   const ref = useRef();
+  const wasSSR = useRef(false);
+  const isSSR = useSyncExternalStore(
+    subscribeToStore,
+    () => wasSSR.current,
+    getServerSnapshot
+  );
+  // This avoids rerendering after hydration since it'll be consistently wasSSR after this.
+  wasSSR.current = isSSR;
   useLayoutEffect(() => {
+    if (wasSSR.current) {
+      // If we're hydrating, it's too late to run the animation.
+      // We have already painted the content.
+      return;
+    }
     const element = ref.current;
     if (!element) {
       return;
