@@ -27,6 +27,19 @@ return (
 );
 ```
 
+To render a caret at the end of the last text to be revealed, you can provide an element to render to the `caret` prop.
+
+```js
+import TypeWriter from 'react-typewriter-reveal';
+...
+return (
+  <TypeWriter caret={<span className="border-l border-black border-solid" />}>
+    ...
+  </TypeWriter>
+);
+```
+
+
 Block elements with their own background, border or outline will be revealed as a single unit. You can use nested `<TypeWriter>` to reveal the text inside a block incrementally.
 
 ```js

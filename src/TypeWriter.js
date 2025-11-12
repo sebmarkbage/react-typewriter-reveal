@@ -124,13 +124,15 @@ function selectNextRange(range, stepsToMove) {
   return -stepsToMove;
 }
 
-function animate(element, duration, fps) {
+function animate(element, caretElement, duration, fps) {
   const frameCount = Math.floor((duration * fps) / 1000);
   if (frameCount < 2) {
     console.warn("TypeWriter duration or fps is too small.");
     return;
   }
   const keyframes = [];
+  const caretTranslateKeyframes = [];
+  const caretOpacityKeyframes = [];
   const range = document.createRange();
   range.setStart(element, 0);
   range.setEnd(element, 0);
@@ -145,6 +147,17 @@ function animate(element, duration, fps) {
   if (referenceRect.width === 0 || referenceRect.height === 0) {
     // Currently invisible. No need to animate.
     return;
+  }
+  let caretReferenceRect = null;
+  let lastRect = null;
+  if (caretElement !== undefined) {
+    const range = document.createRange();
+    range.selectNodeContents(caretElement);
+    // Measure the size of the contents. Allowing us to get the line-height.
+    const caretElementRects = range.getClientRects();
+    if (caretElementRects.length > 0) {
+      caretReferenceRect = caretElementRects[0];
+    }
   }
   let path = "";
   for (let i = 0; i < frameCount - 1; i++) {
@@ -164,19 +177,60 @@ function animate(element, duration, fps) {
       const w = rect.width;
       const h = rect.height;
       path += "M " + x + " " + y + " h " + w + " v " + h + " H " + x + " Z";
+      lastRect = rect;
     }
-    keyframes.push({
-      clipPath: path === "" ? "polygon(0 0)" : 'path("' + path + '")',
-    });
+    keyframes.push(path === "" ? "polygon(0 0)" : 'path("' + path + '")');
+    if (caretReferenceRect) {
+      if (lastRect === null || range.endContainer.nodeType !== TEXT_NODE) {
+        caretOpacityKeyframes.push("0");
+        caretTranslateKeyframes.push("none");
+      } else {
+        const caretX = lastRect.right - caretReferenceRect.x;
+        const caretY = lastRect.bottom - caretReferenceRect.bottom;
+        caretOpacityKeyframes.push("1");
+        caretTranslateKeyframes.push(caretX + "px " + caretY + "px");
+      }
+    }
     currentStep += stepsToMove + overshoot;
   }
   // The last frame shows everything.
-  keyframes.push({
-    clipPath: "none",
-  });
-  element.animate(keyframes, {
-    duration: duration,
-  });
+  keyframes.push("none");
+  // Hide the caret at the end.
+  caretOpacityKeyframes.push("0");
+  caretTranslateKeyframes.push("none");
+
+  const easing = "steps(" + (frameCount - 1) + ", end)";
+
+  // Start the animtion
+  const elementAnimation = element.animate(
+    {
+      clipPath: keyframes,
+    },
+    {
+      duration,
+      easing,
+    }
+  );
+  if (caretElement !== undefined && caretReferenceRect !== null) {
+    const caretAnimation = caretElement.animate(
+      {
+        opacity: caretOpacityKeyframes,
+        translate: caretTranslateKeyframes,
+      },
+      {
+        duration,
+        easing,
+      }
+    );
+    return () => {
+      elementAnimation.cancel();
+      caretAnimation.cancel();
+    };
+  } else {
+    return () => {
+      elementAnimation.cancel();
+    };
+  }
 }
 
 function subscribeToStore() {
@@ -187,8 +241,15 @@ function getServerSnapshot() {
   return true;
 }
 
-export default function TypeWriter({ children, fps = 60, duration = 300 }) {
+export default function TypeWriter({
+  children,
+  fps = 60,
+  duration = 30,
+  caret,
+}) {
   const ref = useRef();
+  const caretRef = useRef();
+
   const wasSSR = useRef(false);
   const isSSR = useSyncExternalStore(
     subscribeToStore,
@@ -204,14 +265,25 @@ export default function TypeWriter({ children, fps = 60, duration = 300 }) {
       return;
     }
     const element = ref.current;
+    const caretElement = caretRef.current;
     if (!element) {
       return;
     }
-    animate(element, duration, fps);
+    return animate(element, caretElement, duration, fps);
   }, []);
   return (
-    <span ref={ref} style={{ display: "inline-block" }}>
-      {children}
-    </span>
+    <>
+      <span ref={ref} style={{ display: "inline-block" }}>
+        {children}
+      </span>
+      {caret != null ? (
+        <span
+          ref={caretRef}
+          style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+        >
+          {caret}
+        </span>
+      ) : null}
+    </>
   );
 }
