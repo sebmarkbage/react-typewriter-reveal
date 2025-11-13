@@ -4,7 +4,7 @@
   "keywords": [
     "react"
   ],
-  "version": "0.0.3",
+  "version": "0.0.4",
   "bugs": "https://github.com/sebmarkbage/react-typewriter-reveal/issues",
   "main": "dist/TypeWriter.js",
   "files": [
