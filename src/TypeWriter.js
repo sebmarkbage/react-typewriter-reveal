@@ -450,6 +450,18 @@ function attemptAnimation(instance) {
     instance.fps,
     instance.delay
   );
+  // It is possible that our children have just started an animation
+  // if the observer event fired on the child before the parent.
+  const children = instance.children;
+  for (let i = 0; i < children; i++) {
+    const child = children[i];
+    const childAnimation = child.runningAnimation;
+    if (childAnimation !== null && childAnimation.startTime === null) {
+      // We haven't actually started yet. We can cancel and restart this animation
+      // so that it'll now be control by its parent so that they're coordinated.
+      attemptAnimation(child);
+    }
+  }
 }
 
 function finishedAnimation(instance) {
