@@ -52,9 +52,11 @@ function isContentElement(element) {
         computedStyle.backgroundColor !== "rgba(0, 0, 0, 0)" ||
         computedStyle.backgroundImage !== "none" ||
         (computedStyle.borderColor !== "rgb(0, 0, 0)" &&
-          computedStyle.borderWidth !== "0px") ||
+          computedStyle.borderWidth !== "0px" &&
+          computedStyle.borderStyle !== "none") ||
         (computedStyle.outlineColor !== "rgb(0, 0, 0)" &&
-          computedStyle.outlineWidth !== "0px")
+          computedStyle.outlineWidth !== "0px" &&
+          computedStyle.outlineStyle !== "none")
       );
   }
 }
