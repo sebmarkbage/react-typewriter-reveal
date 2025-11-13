@@ -453,7 +453,7 @@ function attemptAnimation(instance) {
   // It is possible that our children have just started an animation
   // if the observer event fired on the child before the parent.
   const children = instance.children;
-  for (let i = 0; i < children; i++) {
+  for (let i = 0; i < children.length; i++) {
     const child = children[i];
     const childAnimation = child.runningAnimation;
     if (childAnimation !== null && childAnimation.startTime === null) {
