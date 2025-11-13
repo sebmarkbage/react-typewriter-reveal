@@ -301,7 +301,7 @@ function animate(
   const easing = "steps(" + (frameCount - 1) + ", end)";
   const fill = "backwards";
 
-  // Start the animtion
+  // Start the animation
   const elementAnimation = element.animate(
     {
       clipPath: keyframes,
@@ -338,6 +338,10 @@ function animate(
   } else {
     instance.runningCaretAnimation = null;
   }
+  elementAnimation.addEventListener(
+    "finish",
+    finishedAnimation.bind(null, instance)
+  );
 }
 
 function subscribeToStore() {
@@ -446,6 +450,20 @@ function attemptAnimation(instance) {
     instance.fps,
     instance.delay
   );
+}
+
+function finishedAnimation(instance) {
+  const runningAnimation = instance.runningAnimation;
+  if (runningAnimation !== null) {
+    instance.runningAnimation = null;
+    instance.stepsCompleted = instance.runningToSteps;
+  }
+  // This should have finished by now but just in case.
+  const runningCaretAnimation = instance.runningCaretAnimation;
+  if (runningCaretAnimation !== null) {
+    instance.runningCaretAnimation = null;
+    runningCaretAnimation.cancel();
+  }
 }
 
 export default function TypeWriter({
