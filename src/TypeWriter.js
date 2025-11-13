@@ -8,6 +8,7 @@ import {
   useRef,
   useLayoutEffect,
   useSyncExternalStore,
+  createElement,
 } from "react";
 
 const TypeWriterContext = createContext(null);
@@ -493,27 +494,31 @@ export default function TypeWriter({
     };
   }, [parentInstance, instance]);
 
-  return (
-    <TypeWriterContext.Provider value={instance}>
-      <span
-        ref={instance.elementRef}
-        style={{
+  return createElement(
+    TypeWriterContext.Provider,
+    { value: instance },
+    createElement(
+      "span",
+      {
+        ref: instance.elementRef,
+        style: {
           // The reason we need an inline-block element or block element as the root
           // is because clip-path's reference frame is not standardized for inline
           // elements and browsers differ in how they implement it.
           display: "inline-block",
-        }}
-      >
-        {children}
-      </span>
-      {caret != null ? (
-        <span
-          ref={instance.caretRef}
-          style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
-        >
-          {caret}
-        </span>
-      ) : null}
-    </TypeWriterContext.Provider>
+        },
+      },
+      children
+    ),
+    caret != null
+      ? createElement(
+          "span",
+          {
+            ref: instance.caretRef,
+            style: { position: "absolute", opacity: 0, pointerEvents: "none" },
+          },
+          caret
+        )
+      : null
   );
 }
