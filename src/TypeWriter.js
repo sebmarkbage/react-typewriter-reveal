@@ -148,36 +148,69 @@ function selectNextRange(range, stepsToMove) {
 }
 
 function animate(
+  rootInstance,
   instance,
-  rootElement,
   element,
   caretElement,
   duration,
   fps,
   delay
 ) {
+  const stepsWithinElement = countSteps(element);
+  instance.totalSteps = stepsWithinElement;
+  const rootElement = rootInstance.elementRef.current;
+  const stepsUntilStart =
+    rootElement === element ? 0 : countSteps(rootElement, element);
+  const stepsWithinRoot = rootInstance.totalSteps;
+
+  if (rootInstance.stepsCompleted >= stepsUntilStart + stepsWithinElement) {
+    // We have already completed further than this whole element. Nothing to animate.
+    return;
+  }
+
+  // Next we'll compute how much progress we've already made along the root.
+  let progress;
+  const runningRootAnimation = rootInstance.runningAnimation;
+  if (
+    runningRootAnimation !== null &&
+    runningRootAnimation.currentTime !== null
+  ) {
+    // We're currently running the root and we've made some additional progress.
+    const timing = runningRootAnimation.effect.getComputedTiming();
+    progress =
+      (runningRootAnimation.currentTime - timing.delay) / timing.activeDuration;
+  } else {
+    progress = rootInstance.stepsCompleted / rootInstance.totalSteps;
+  }
+  const startTime = rootInstance.duration * progress;
+
+  // Add a delay until the root animation's steps have reached us.
+  delay += (duration * stepsUntilStart) / stepsWithinRoot;
+  // Adjust the duration based on the slice of the root duration we occupy.
+  duration *= stepsWithinElement / stepsWithinRoot;
+
+  if (startTime >= delay + duration) {
+    // We are starting after we should be finished. Skip the animation.
+    return;
+  }
+
   const frameCount = Math.floor((duration * fps) / 1000);
   if (frameCount < 2) {
     console.warn("TypeWriter duration or fps is too small.");
     return;
   }
+
   const keyframes = [];
   const caretTranslateKeyframes = [];
   const caretOpacityKeyframes = [];
   const range = document.createRange();
   range.setStart(element, 0);
   range.setEnd(element, 0);
-  const stepsWithinElement = countSteps(element);
-  const stepsUntilStart =
-    rootElement === element ? 0 : countSteps(rootElement, element);
-  const stepsWithinRoot =
-    rootElement === element ? stepsWithinElement : countSteps(rootElement);
-  const stepsPerFrame = countSteps(element) / frameCount;
 
-  // Add a delay until the root animation's steps have reached us.
-  delay += (duration * stepsUntilStart) / stepsWithinRoot;
-  // Adjust the duration based on the slice of the root duration we occupy.
-  duration *= stepsWithinElement / stepsWithinRoot;
+  if (rootInstance.stepsCompleted >= stepsUntilStart + stepsWithinElement) {
+    // We have already completed further than this whole element. Nothing to animate.
+    return;
+  }
 
   let currentStep = 0;
   const elementRects = element.getClientRects();
@@ -202,6 +235,7 @@ function animate(
     }
   }
   let path = "";
+  const stepsPerFrame = stepsWithinElement / frameCount;
   for (let i = 0; i < frameCount; i++) {
     // We compute the steps move based on where we are and where we should
     // be so that we spread out the number of steps through the sequence.
@@ -251,7 +285,10 @@ function animate(
       fill,
     }
   );
-  instance.stepsCompleted = stepsWithinElement;
+  if (startTime > 0) {
+    elementAnimation.currentTime = startTime;
+  }
+  instance.runningToSteps = stepsWithinElement;
   instance.runningAnimation = elementAnimation;
   if (caretElement !== null && caretReferenceRect !== null) {
     const caretAnimation = caretElement.animate(
@@ -266,6 +303,9 @@ function animate(
         fill,
       }
     );
+    if (startTime > 0) {
+      caretAnimation.currentTime = startTime;
+    }
     instance.runningCaretAnimation = caretAnimation;
   } else {
     instance.runningCaretAnimation = null;
@@ -307,7 +347,9 @@ function createTypeWriterInstance() {
     duration: 300,
     fps: 60,
     delay: 0,
+    totalSteps: 0,
     stepsCompleted: 0,
+    runningToSteps: 0,
     runningAnimation: null,
     runningCaretAnimation: null,
     mutationObserver: null,
@@ -330,9 +372,19 @@ function createTypeWriterInstance() {
 
 function attemptAnimation(instance) {
   // Restart
-  if (instance.runningAnimation !== null) {
-    instance.runningAnimation.cancel();
+  const runningAnimation = instance.runningAnimation;
+  if (runningAnimation !== null) {
     instance.runningAnimation = null;
+    const stopTime = runningAnimation.currentTime;
+    if (stopTime !== null) {
+      const timing = runningAnimation.effect.getComputedTiming();
+      const overallProgress = (stopTime - timing.delay) / timing.activeDuration;
+      if (overallProgress > 0) {
+        // We made some progress. Let's update how many steps we've completed.
+        instance.stepsCompleted = instance.runningToSteps * overallProgress;
+      }
+    }
+    runningAnimation.cancel();
   }
   if (instance.runningCaretAnimation !== null) {
     instance.runningCaretAnimation.cancel();
@@ -344,7 +396,6 @@ function attemptAnimation(instance) {
     return;
   }
   let animatingRoot = instance;
-  let animatingRootElement = element;
   while (
     animatingRoot.parent !== null &&
     animatingRoot.parent.runningAnimation !== null
@@ -357,11 +408,10 @@ function attemptAnimation(instance) {
       );
       return;
     }
-    animatingRootElement = parentElement;
   }
   animate(
+    animatingRoot,
     instance,
-    animatingRootElement,
     element,
     caretElement,
     animatingRoot.duration,
