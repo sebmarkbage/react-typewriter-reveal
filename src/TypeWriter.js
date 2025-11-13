@@ -114,6 +114,25 @@ function selectNextRange(range, stepsToMove) {
   let offset = range.endOffset;
   // Collapse to the end.
   range.setStart(container, offset);
+  if (offset > 0 && stepsToMove > 0 && container.nodeType !== TEXT_NODE) {
+    if (offset >= container.childNodes.length) {
+      // Skip to next child.
+      while (container.nextSibling === null) {
+        if (container.parentNode === null) {
+          offset = 0;
+          range.setEnd(container, offset);
+          return;
+        }
+        container = container.parentNode;
+      }
+      container = container.nextSibling;
+      offset = 0;
+    } else {
+      // Jump inside the selected node.
+      container = container.childNodes[offset];
+      offset = 0;
+    }
+  }
   while (stepsToMove > 0) {
     if (container.nodeType === TEXT_NODE) {
       const textRemaining = container.nodeValue.length - offset;
@@ -130,6 +149,11 @@ function selectNextRange(range, stepsToMove) {
       } else if (isContentElement(container)) {
         // We've consumed one step.
         stepsToMove -= getContentLength(container);
+        if (stepsToMove <= 0) {
+          // Make the selection after the current element.
+          range.setEndAfter(container);
+          return -stepsToMove;
+        }
       } else if (container.firstChild !== null) {
         container = container.firstChild;
         continue;
@@ -138,8 +162,9 @@ function selectNextRange(range, stepsToMove) {
     // Move onto the next node.
     while (container.nextSibling === null) {
       if (container.parentNode === null) {
+        offset = 0;
         range.setEnd(container, offset);
-        return;
+        return -stepsToMove;
       }
       container = container.parentNode;
     }
