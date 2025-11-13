@@ -275,8 +275,26 @@ function getServerSnapshot() {
   return true;
 }
 
+function observeResize(instance) {
+  if (instance.ignoreInitialResize) {
+    instance.ignoreInitialResize = false;
+  } else {
+    attemptAnimation(instance);
+  }
+}
+
+function observeMutation(instance) {
+  // Force a resize event to happen. We do this to avoid having to trigger
+  // two events if there's both a mutation and resize. That way we always
+  // reliably animate in the resize callback.
+  const element = instance.elementRef.current;
+  const resizeObserver = instance.resizeObserver;
+  resizeObserver.unobserve(element);
+  resizeObserver.observe(element);
+}
+
 function createTypeWriterInstance() {
-  return {
+  const instance = {
     parent: null,
     children: [],
     elementRef: createRef(null),
@@ -284,12 +302,31 @@ function createTypeWriterInstance() {
     duration: 300,
     fps: 60,
     delay: 0,
-    scheduled: false,
     runningAnimation: null,
+    mutationObserver: null,
+    resizeObserver: null,
+    ignoreInitialResize: false,
   };
+  if (
+    typeof MutationObserver === "function" &&
+    typeof ResizeObserver === "function"
+  ) {
+    instance.mutationObserver = new MutationObserver(
+      observeMutation.bind(null, instance)
+    );
+    instance.resizeObserver = new ResizeObserver(
+      observeResize.bind(null, instance)
+    );
+  }
+  return instance;
 }
 
 function attemptAnimation(instance) {
+  if (instance.runningAnimation !== null) {
+    // Restart
+    const cancel = instance.runningAnimation;
+    cancel();
+  }
   const element = instance.elementRef.current;
   const caretElement = instance.caretRef.current;
   if (!element) {
@@ -297,7 +334,10 @@ function attemptAnimation(instance) {
   }
   let animatingRoot = instance;
   let animatingRootElement = element;
-  while (animatingRoot.parent !== null && animatingRoot.parent.scheduled) {
+  while (
+    animatingRoot.parent !== null &&
+    animatingRoot.parent.runningAnimation !== null
+  ) {
     animatingRoot = animatingRoot.parent;
     const parentElement = animatingRoot.elementRef.current;
     if (parentElement === null) {
@@ -354,29 +394,24 @@ export default function TypeWriter({
       parentChildren.push(instance);
     }
 
-    if (instance.scheduled) {
-      console.error("Did not expect to see the instance already scheduled.");
-      return;
+    const element = instance.elementRef.current;
+    if (element !== null) {
+      instance.mutationObserver.observe(element, {
+        subtree: true,
+        childList: true,
+        attributeFilter: ["class", "style", "src"],
+      });
+      // If we're hydrating, it's too late to run the animation.
+      // We have already painted the content. We'll ignore the initial resize event
+      // and then listen to future changes.
+      instance.ignoreInitialResize = wasSSR.current;
+      // This will trigger an initial event which will start the mount animation.
+      instance.resizeObserver.observe(element);
     }
 
-    let canceled = false;
-    if (wasSSR.current) {
-      // If we're hydrating, it's too late to run the animation.
-      // We have already painted the content.
-    } else {
-      // Schedule an animation to after we know if any parents/siblings will animate too.
-      instance.scheduled = true;
-      queueMicrotask(() => {
-        if (canceled) {
-          return;
-        }
-        instance.scheduled = false;
-        attemptAnimation(instance);
-      });
-    }
     return () => {
-      canceled = true;
-      instance.scheduled = false;
+      instance.mutationObserver.disconnect();
+      instance.resizeObserver.disconnect();
       // Remove ourselves from the parent.
       if (parentInstance !== null) {
         instance.parent = null;
