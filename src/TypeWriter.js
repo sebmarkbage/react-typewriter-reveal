@@ -147,7 +147,15 @@ function selectNextRange(range, stepsToMove) {
   return -stepsToMove;
 }
 
-function animate(rootElement, element, caretElement, duration, fps, delay) {
+function animate(
+  instance,
+  rootElement,
+  element,
+  caretElement,
+  duration,
+  fps,
+  delay
+) {
   const frameCount = Math.floor((duration * fps) / 1000);
   if (frameCount < 2) {
     console.warn("TypeWriter duration or fps is too small.");
@@ -243,6 +251,8 @@ function animate(rootElement, element, caretElement, duration, fps, delay) {
       fill,
     }
   );
+  instance.stepsCompleted = stepsWithinElement;
+  instance.runningAnimation = elementAnimation;
   if (caretElement !== null && caretReferenceRect !== null) {
     const caretAnimation = caretElement.animate(
       {
@@ -256,14 +266,9 @@ function animate(rootElement, element, caretElement, duration, fps, delay) {
         fill,
       }
     );
-    return () => {
-      elementAnimation.cancel();
-      caretAnimation.cancel();
-    };
+    instance.runningCaretAnimation = caretAnimation;
   } else {
-    return () => {
-      elementAnimation.cancel();
-    };
+    instance.runningCaretAnimation = null;
   }
 }
 
@@ -302,7 +307,9 @@ function createTypeWriterInstance() {
     duration: 300,
     fps: 60,
     delay: 0,
+    stepsCompleted: 0,
     runningAnimation: null,
+    runningCaretAnimation: null,
     mutationObserver: null,
     resizeObserver: null,
     ignoreInitialResize: false,
@@ -322,10 +329,14 @@ function createTypeWriterInstance() {
 }
 
 function attemptAnimation(instance) {
+  // Restart
   if (instance.runningAnimation !== null) {
-    // Restart
-    const cancel = instance.runningAnimation;
-    cancel();
+    instance.runningAnimation.cancel();
+    instance.runningAnimation = null;
+  }
+  if (instance.runningCaretAnimation !== null) {
+    instance.runningCaretAnimation.cancel();
+    instance.runningCaretAnimation = null;
   }
   const element = instance.elementRef.current;
   const caretElement = instance.caretRef.current;
@@ -348,7 +359,8 @@ function attemptAnimation(instance) {
     }
     animatingRootElement = parentElement;
   }
-  const cancel = animate(
+  animate(
+    instance,
     animatingRootElement,
     element,
     caretElement,
@@ -356,9 +368,6 @@ function attemptAnimation(instance) {
     instance.fps,
     instance.delay
   );
-  if (cancel) {
-    instance.runningAnimation = cancel;
-  }
 }
 
 export default function TypeWriter({
@@ -421,10 +430,15 @@ export default function TypeWriter({
           parentChildren.splice(idx, 1);
         }
       }
-      const cancel = instance.runningAnimation;
-      if (cancel) {
+      const runningAnimation = instance.runningAnimation;
+      if (runningAnimation !== null) {
         instance.runningAnimation = null;
-        cancel();
+        runningAnimation.cancel();
+      }
+      const runningCaretAnimation = instance.runningCaretAnimation;
+      if (runningCaretAnimation !== null) {
+        instance.runningCaretAnimation = null;
+        runningCaretAnimation.cancel();
       }
     };
   }, [parentInstance, instance]);
