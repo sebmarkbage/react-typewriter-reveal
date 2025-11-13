@@ -353,20 +353,20 @@ function getServerSnapshot() {
 }
 
 function observeResize(instance) {
-  if (instance.ignoreInitialResize) {
-    instance.ignoreInitialResize = false;
-  } else {
-    attemptAnimation(instance);
+  attemptAnimation(instance);
+  if (instance.runningAnimation === null) {
+    instance.resizeObserver.disconnect();
   }
 }
 
 function observeMutation(instance) {
   // Force a resize event to happen. We do this to avoid having to trigger
   // two events if there's both a mutation and resize. That way we always
-  // reliably animate in the resize callback.
+  // reliably animate in the resize callback. This may reattach the resize
+  // observer.
   const element = instance.elementRef.current;
   const resizeObserver = instance.resizeObserver;
-  resizeObserver.unobserve(element);
+  resizeObserver.disconnect();
   resizeObserver.observe(element);
 }
 
@@ -386,7 +386,6 @@ function createTypeWriterInstance() {
     runningCaretAnimation: null,
     mutationObserver: null,
     resizeObserver: null,
-    ignoreInitialResize: false,
   };
   if (
     typeof MutationObserver === "function" &&
@@ -468,6 +467,7 @@ function finishedAnimation(instance) {
   const runningAnimation = instance.runningAnimation;
   if (runningAnimation !== null) {
     instance.runningAnimation = null;
+    instance.resizeObserver.disconnect();
     instance.stepsCompleted = instance.runningToSteps;
   }
   // This should have finished by now but just in case.
@@ -518,12 +518,15 @@ export default function TypeWriter({
         childList: true,
         attributeFilter: ["class", "style", "src"],
       });
-      // If we're hydrating, it's too late to run the animation.
-      // We have already painted the content. We'll ignore the initial resize event
-      // and then listen to future changes.
-      instance.ignoreInitialResize = wasSSR.current;
-      // This will trigger an initial event which will start the mount animation.
-      instance.resizeObserver.observe(element);
+      if (wasSSR.current) {
+        // If we're hydrating, it's too late to run the animation.
+        // We have already painted the content. We'll ignore the initial resize event
+        // and then listen to future changes.
+        instance.stepsCompleted = countSteps(element);
+      } else {
+        // This will trigger an initial event which will start the mount animation.
+        instance.resizeObserver.observe(element);
+      }
     }
 
     return () => {
