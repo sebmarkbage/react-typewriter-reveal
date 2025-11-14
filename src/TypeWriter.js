@@ -175,17 +175,22 @@ function selectNextRange(range, stepsToMove) {
   return -stepsToMove;
 }
 
-function animate(
-  rootInstance,
-  instance,
-  element,
-  caretElement,
-  duration,
-  fps,
-  delay
-) {
+function animate(rootInstance, instance, element, caretElement) {
   const stepsWithinElement = countSteps(element);
+  const remainingSteps = stepsWithinElement - instance.stepsCompleted;
+  if (stepsWithinElement > instance.totalSteps && remainingSteps > 0) {
+    // We expanded the number of steps. Likely by adding something to the end.
+    // We should now animate from the current point to the end for "duration" time.
+    // Basically, we're ok waiting max "duration" time to show any new content.
+    // To model this, we expand the duration for the total from the start to end.
+    instance.durationMultiplier = stepsWithinElement / remainingSteps;
+  }
   instance.totalSteps = stepsWithinElement;
+
+  let duration = rootInstance.duration * rootInstance.durationMultiplier;
+  let delay = instance.delay;
+  const fps = instance.fps;
+
   const rootElement = rootInstance.elementRef.current;
   const stepsUntilStart =
     rootElement === element ? 0 : countSteps(rootElement, element);
@@ -210,7 +215,8 @@ function animate(
   } else {
     progress = rootInstance.stepsCompleted / rootInstance.totalSteps;
   }
-  const startTime = rootInstance.duration * progress;
+  const startTime =
+    rootInstance.duration * rootInstance.durationMultiplier * progress;
 
   // Add a delay until the root animation's steps have reached us.
   delay += (duration * stepsUntilStart) / stepsWithinRoot;
@@ -377,6 +383,7 @@ function createTypeWriterInstance() {
     elementRef: createRef(null),
     caretRef: createRef(null),
     duration: 300,
+    durationMultiplier: 1,
     fps: 60,
     delay: 0,
     totalSteps: 0,
@@ -440,15 +447,7 @@ function attemptAnimation(instance) {
       return;
     }
   }
-  animate(
-    animatingRoot,
-    instance,
-    element,
-    caretElement,
-    animatingRoot.duration,
-    instance.fps,
-    instance.delay
-  );
+  animate(animatingRoot, instance, element, caretElement);
   // It is possible that our children have just started an animation
   // if the observer event fired on the child before the parent.
   const children = instance.children;
